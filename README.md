@@ -6,6 +6,16 @@ This skill applies a **local patch** to an **installed OpenClaw dist bundle** so
 
 中文版本：[`README.zh-TW.md`](README.zh-TW.md)
 
+## Paste this into OpenClaw
+
+Use this one-liner if you want OpenClaw to fetch the install guide and carry out the install/apply workflow on the target machine:
+
+```text
+Fetch and follow instructions from https://raw.githubusercontent.com/tsunheimat/openclaw-responses-prompt-cache-patch/refs/heads/main/.openclaw/INSTALL.md
+```
+
+Use the **raw** URL, not the GitHub `blob/...` page. The `.openclaw/INSTALL.md` file is written as an OpenClaw-specific execution guide: install the skill, run dry-run, apply the patch, restart the gateway, and report the result.
+
 ## Who this is for
 
 Use this if you:
@@ -21,7 +31,7 @@ Do **not** use this if you want an upstream OpenClaw code change, a config-only 
 
 ```text
 .
-├── .codex/INSTALL.md
+├── .openclaw/INSTALL.md
 ├── .gitignore
 ├── README.md
 └── skill/
@@ -75,10 +85,10 @@ The public-facing repo docs live at the repo root. The installable skill stays c
    openclaw gateway restart
    ```
 
-For a more copy-paste-oriented walkthrough, see [.codex/INSTALL.md](.codex/INSTALL.md).
+For the OpenClaw-specific install/apply playbook, see [.openclaw/INSTALL.md](.openclaw/INSTALL.md).
 
 Direct raw URL:
-`https://raw.githubusercontent.com/tsunheimat/openclaw-responses-prompt-cache-patch/refs/heads/main/.codex/INSTALL.md`
+`https://raw.githubusercontent.com/tsunheimat/openclaw-responses-prompt-cache-patch/refs/heads/main/.openclaw/INSTALL.md`
 
 ## Apply / rollback commands
 
