@@ -7,6 +7,14 @@ description: Patch an installed OpenClaw dist bundle so third-party OpenAI-compa
 
 Patch the installed OpenClaw dist bundle so `shouldStripResponsesPromptCache(model)` stops deleting `prompt_cache_key` and `prompt_cache_retention` for third-party OpenAI-compatible Responses endpoints.
 
+Source: https://github.com/tsunheimat/openclaw-responses-prompt-cache-patch
+
+## Quick install for OpenClaw
+
+```bash
+clawhub install responses-third-party-prompt-cache-patch --workdir ~/.openclaw/workspace
+```
+
 ## Risks
 
 - Write directly into the OpenClaw installation directory under `dist/`.

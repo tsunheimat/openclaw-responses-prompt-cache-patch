@@ -4,7 +4,19 @@ A GitHub-ready wrapper repo for the `responses-third-party-prompt-cache-patch` O
 
 This skill applies a **local patch** to an **installed OpenClaw dist bundle** so third-party OpenAI-compatible Responses endpoints keep `prompt_cache_key` and `prompt_cache_retention` instead of having them stripped.
 
-中文版本：[`README.zh-TW.md`](README.zh-TW.md)
+中文版本：[README.zh-TW.md](README.zh-TW.md)
+
+ClawHub: [responses-third-party-prompt-cache-patch](https://clawhub.ai/tsunheimat/responses-third-party-prompt-cache-patch)
+
+## Quick install for OpenClaw
+
+Install the skill into the default OpenClaw workspace:
+
+```bash
+clawhub install responses-third-party-prompt-cache-patch --workdir ~/.openclaw/workspace
+```
+
+After install, follow the apply workflow below or use the OpenClaw paste-in instruction.
 
 ## Paste this into OpenClaw
 

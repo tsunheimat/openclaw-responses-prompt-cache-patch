@@ -4,6 +4,20 @@
 
 這個 skill 會對**已安裝的 OpenClaw `dist/` bundle** 套用一個**本地 patch**，讓第三方 OpenAI-compatible Responses endpoint 不會再被 OpenClaw 剝掉 `prompt_cache_key` 和 `prompt_cache_retention`。
 
+English version: [README.md](README.md)
+
+ClawHub： [responses-third-party-prompt-cache-patch](https://clawhub.ai/tsunheimat/responses-third-party-prompt-cache-patch)
+
+## OpenClaw 一行快速安裝
+
+把 skill 安裝到預設 OpenClaw workspace：
+
+```bash
+clawhub install responses-third-party-prompt-cache-patch --workdir ~/.openclaw/workspace
+```
+
+裝完之後，再按下方 apply 流程執行，或者直接用下面嗰條貼進 OpenClaw。
+
 ## 直接貼進 OpenClaw
 
 如果你想讓 OpenClaw 直接抓取安裝指南並在目標機器上執行 install/apply workflow，可直接貼這一行：
