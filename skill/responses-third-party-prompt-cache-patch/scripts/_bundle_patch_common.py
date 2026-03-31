@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -18,6 +19,9 @@ TARGET_RETURN = "return !isDirectOpenAIBaseUrl(model.baseUrl);"
 PATCHED_RETURN = f"return false; /* {PATCH_MARKER} */"
 PREFERRED_PATTERNS: Sequence[str] = ("pi-embedded-*.js",)
 FALLBACK_PATTERNS: Sequence[str] = ("*.js",)
+SYSTEMD_UNIT_NAME = "openclaw-gateway"
+SYSTEMD_SERVICE_PATH = Path.home() / ".config" / "systemd" / "user" / f"{SYSTEMD_UNIT_NAME}.service"
+DIST_INDEX_PATTERN = re.compile(r'([A-Za-z0-9_./~+-]+/dist/index\.js)')
 
 
 class PatchError(RuntimeError):
@@ -37,9 +41,14 @@ class BundleInspection:
 def resolve_openclaw_root(explicit_root: str | None) -> Path:
     """Resolve the OpenClaw installation root.
 
-    The skill defaults to the currently installed OpenClaw by resolving the
-    `openclaw` executable. `--root` can override this for fixtures or other
-    installations.
+    Resolution order:
+    1. Explicit ``--root`` override
+    2. Active gateway service command / systemd unit ExecStart
+    3. ``openclaw`` executable on PATH
+
+    When the gateway service and CLI point at different installs, prefer the
+    running gateway root because that is the bundle the operator almost always
+    intends to patch. Emit a clear note so the operator understands why.
     """
 
     if explicit_root:
@@ -47,28 +56,141 @@ def resolve_openclaw_root(explicit_root: str | None) -> Path:
         ensure_dist_dir(root)
         return root
 
-    executable = shutil.which("openclaw")
-    checked: list[Path] = []
-    if executable:
-        resolved = Path(executable).expanduser().resolve()
-        candidates = [
-            resolved.parent,
-            resolved.parent.parent,
-            resolved.parent.parent / "lib" / "node_modules" / "openclaw",
-        ]
-        for candidate in candidates:
-            if candidate in checked:
-                continue
-            checked.append(candidate)
-            if (candidate / "dist").is_dir():
-                return candidate
+    candidates: list[tuple[str, Path]] = []
 
-    checked_summary = ", ".join(str(path) for path in checked) if checked else "<none>"
-    raise PatchError(
-        "Could not locate the installed OpenClaw root automatically. "
-        "Pass --root /path/to/openclaw. Checked: "
-        f"{checked_summary}"
+    gateway_candidate = _resolve_gateway_root()
+    if gateway_candidate is not None:
+        candidates.append(gateway_candidate)
+
+    executable_candidate = _resolve_root_from_openclaw_executable()
+    if executable_candidate is not None:
+        candidates.append(executable_candidate)
+
+    if not candidates:
+        checked_summary = ", ".join(_checked_location_hints())
+        raise PatchError(
+            "Could not locate the installed OpenClaw root automatically. "
+            "Pass --root /path/to/openclaw. Checked: "
+            f"{checked_summary}"
+        )
+
+    unique_roots: dict[Path, list[str]] = {}
+    for source, root in candidates:
+        unique_roots.setdefault(root, []).append(source)
+
+    gateway_root = gateway_candidate[1] if gateway_candidate is not None else None
+    if gateway_root is not None:
+        if len(unique_roots) > 1:
+            other_roots = [
+                f"{root} ({', '.join(sources)})"
+                for root, sources in unique_roots.items()
+                if root != gateway_root
+            ]
+            print(
+                "Detected multiple OpenClaw installs. "
+                f"Using active gateway root {gateway_root} "
+                f"({', '.join(unique_roots[gateway_root])}). "
+                f"Other detected roots: {'; '.join(other_roots)}. "
+                "Pass --root to override."
+            )
+        return gateway_root
+
+    if len(unique_roots) == 1:
+        return next(iter(unique_roots))
+
+    candidates_summary = "; ".join(
+        f"{root} ({', '.join(sources)})" for root, sources in unique_roots.items()
     )
+    raise PatchError(
+        "Detected multiple OpenClaw installs but could not identify the active gateway root automatically. "
+        f"Pass --root /path/to/openclaw. Candidates: {candidates_summary}"
+    )
+
+
+def _checked_location_hints() -> list[str]:
+    hints = [str(SYSTEMD_SERVICE_PATH), "systemctl --user show openclaw-gateway", "which openclaw"]
+    return hints
+
+
+def _resolve_gateway_root() -> tuple[str, Path] | None:
+    systemctl_candidate = _resolve_root_from_systemctl()
+    if systemctl_candidate is not None:
+        return systemctl_candidate
+
+    service_file_candidate = _resolve_root_from_service_file()
+    if service_file_candidate is not None:
+        return service_file_candidate
+
+    return None
+
+
+def _resolve_root_from_systemctl() -> tuple[str, Path] | None:
+    try:
+        result = subprocess.run(
+            ["systemctl", "--user", "show", SYSTEMD_UNIT_NAME, "--property=ExecStart", "--value"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+
+    text = "\n".join(part for part in [result.stdout, result.stderr] if part)
+    root = _extract_openclaw_root_from_text(text)
+    if root is None:
+        return None
+    return ("running gateway service", root)
+
+
+def _resolve_root_from_service_file() -> tuple[str, Path] | None:
+    if not SYSTEMD_SERVICE_PATH.is_file():
+        return None
+
+    try:
+        text = SYSTEMD_SERVICE_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+    root = _extract_openclaw_root_from_text(text)
+    if root is None:
+        return None
+    return (f"systemd unit file {SYSTEMD_SERVICE_PATH}", root)
+
+
+def _resolve_root_from_openclaw_executable() -> tuple[str, Path] | None:
+    executable = shutil.which("openclaw")
+    if not executable:
+        return None
+
+    resolved = Path(executable).expanduser().resolve()
+    candidates = [
+        resolved.parent,
+        resolved.parent.parent,
+        resolved.parent.parent / "lib" / "node_modules" / "openclaw",
+    ]
+    for candidate in candidates:
+        if (candidate / "dist").is_dir():
+            return (f"openclaw executable {resolved}", candidate)
+    return None
+
+
+def _extract_openclaw_root_from_text(text: str) -> Path | None:
+    for raw_match in DIST_INDEX_PATTERN.findall(text):
+        candidate = Path(raw_match).expanduser()
+        if not candidate.is_absolute():
+            continue
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if resolved.name != "index.js":
+            continue
+        if resolved.parent.name != "dist":
+            continue
+        root = resolved.parent.parent
+        if (root / "dist").is_dir():
+            return root
+    return None
 
 
 def ensure_dist_dir(root: Path) -> Path:
